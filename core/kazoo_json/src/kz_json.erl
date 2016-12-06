@@ -858,7 +858,9 @@ get_values(Key, JObj) ->
     get_values(get_value(Key, JObj, new())).
 
 %% Figure out how to set the current key among a list of objects
--type set_value_fun() :: {fun((object(), json_term()) -> object()), json_term()}.
+
+-type set_value_fun() :: {fun((object(), json_term()) -> object()), json_term()} |
+                         fun((object()) -> object()).
 -type set_value_funs() :: [set_value_fun(),...].
 
 -spec set_values([{path(), json_term()}] | set_value_funs(), object()) -> object().
@@ -868,6 +870,8 @@ set_values(KVs, JObj) when is_list(KVs) ->
 -spec set_value_fold(set_value_fun() | {path(), json_term()}, object()) -> object().
 set_value_fold({F, V}, JObj) when is_function(F, 2) ->
     F(JObj, V);
+set_value_fold(F, JObj) when is_function(F, 1) ->
+    F(JObj);
 set_value_fold({K, V}, JObj) ->
     set_value(K, V, JObj).
 

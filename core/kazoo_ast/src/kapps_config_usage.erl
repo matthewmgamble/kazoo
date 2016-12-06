@@ -356,7 +356,7 @@ key_to_key_path(?LIST(Head, Tail)) ->
     end;
 key_to_key_path(?BINARY_MATCH(K)) ->
     try [kz_ast_util:binary_match_to_binary(K)]
-    catch error:function_clause -> undefined
+    catch 'error':'function_clause' -> 'undefined'
     end.
 
 guess_type('is_true', _Default) -> <<"boolean">>;
@@ -376,6 +376,7 @@ guess_type('get_atom', _Default) -> <<"string">>;
 guess_type('get_global', Default) -> guess_type_by_default(Default);
 guess_type('set_default', _Default) -> 'undefined';
 guess_type('set', Default) -> guess_type_by_default(Default);
+guess_type('set_string', _) -> <<"string">>;
 guess_type('set_node', Default) -> guess_type_by_default(Default);
 guess_type('update_default', Default) -> guess_type_by_default(Default).
 
