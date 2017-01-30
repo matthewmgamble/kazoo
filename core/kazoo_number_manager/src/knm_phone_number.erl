@@ -208,10 +208,10 @@ group_by_db(Nums) ->
 
 split_by_db(PNs) ->
     F = fun (PN, M) ->
-                Key = knm_converters:to_db(number(PN)),
+                Key = number_db(PN),
                 M#{Key => [PN | maps:get(Key, M, [])]}
         end,
-    maps:to_list(lists:foldl(F, #{}, PNs)).
+    lists:foldl(F, #{}, PNs).
 
 -ifdef(TEST).
 fetch(Num, Options) ->
@@ -297,31 +297,40 @@ is_mdn_for_mdn_run(PN, Options) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec save(knm_phone_number()) -> knm_phone_number();
-          (knm_numbers:collection()) -> knm_numbers:collection().
-save(T0=#{todo := PNs, options := Options}) ->
+-spec save(knm_numbers:collection()) -> knm_numbers:collection().
+save(T0) ->
+    {T, NotToSave} = take_not_to_save(T0),
+    Ta = knm_numbers:ok(NotToSave, T),
+    Tb = knm_numbers:pipe(T, [fun save_to_number_db/1
+                             ,fun handle_assignment/1
+                             ]),
+    knm_numbers:merge_okkos(Ta, Tb).
+
+take_not_to_save(T0=#{todo := PNs, options := Options}) ->
+    T = T0#{todo => []},
     case knm_number_options:dry_run(Options) of
         true ->
             lager:debug("dry_run-ing btw"),
             knm_numbers:ok(PNs, T0);
         false ->
-            F = fun (PN, T) ->
-                        case knm_number:attempt(fun save/1, [PN]) of
-                            {error, R} -> knm_numbers:ko(number(PN), R, T);
-                            NewPN -> knm_numbers:ok(NewPN, T)
-                        end
-                end,
-            lists:foldl(F, T0, PNs)
-    end;
-save(#knm_phone_number{is_dirty = false}=PhoneNumber) ->
-    lager:debug("not dirty, skip saving ~s", [number(PhoneNumber)]),
-    PhoneNumber;
-save(PhoneNumber) ->
-    Routines = [fun save_to_number_db/1
-               ,fun handle_assignment/1
-               ],
-    {'ok', NewPhoneNumber} = setters(PhoneNumber, Routines),
-    NewPhoneNumber.
+            lists:foldl(fun take_not_to_save_fold/2, {T, []}, PNs)
+    end.
+
+take_not_to_save_fold(PN, {T, NotToSave}) ->
+    NotDirty = not PN#knm_phone_number.is_dirty,
+    case NotDirty
+        orelse ?NUMBER_STATE_DELETED =:= state(PN)
+    of
+        false -> {knm_numbers:ok(PN, T), NotToSave};
+        true ->
+            log_why_not_to_save(NotDirty, number(PN)),
+            {T, [PN|NotToSave]}
+    end.
+
+log_why_not_to_save(true, _Num) ->
+    lager:debug("not dirty, skip saving ~s", [_Num]);
+log_why_not_to_save(false, _Num) ->
+    lager:debug("deleted, skip saving ~s", [_Num]).
 
 %%--------------------------------------------------------------------
 %% @public
@@ -1348,26 +1357,35 @@ is_in_account_hierarchy(AuthBy, AccountId) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec save_to_number_db(knm_phone_number()) -> knm_phone_number().
+-spec save_to_number_db(knm_numbers:collection()) -> knm_numbers:collection().
+save_to_number_db(T0) ->
+    F = fun (NumberDb, PNs, T) ->
+                Docs = [to_json(PN) || PN <- PNs],
+                case save_number_docs(NumberDb, Docs) of
+                    ok -> knm_numbers:add_oks(PNs, T);
+                    E ->
+                        {error,A,B,C} = (catch knm_errors:database_error(E, undefined)),
+                        Reason = knm_errors:to_json(A, B, C),
+                        knm_numbers:ko(PNs, Reason, T)
+                end
+        end,
+    maps:fold(F, T0, split_by_db(knm_numbers:todo(T0))).
+
+-spec save_number_docs(ne_binary(), kz_json:objects()) -> ok | kz_data:data_errors().
 -ifdef(TEST).
-save_to_number_db(PhoneNumber) -> PhoneNumber.
+save_number_docs(_, _) -> ok.
 -else.
-save_to_number_db(#knm_phone_number{state = ?NUMBER_STATE_DELETED}=PhoneNumber) ->
-    lager:debug("deleted, skip saving ~s", [number(PhoneNumber)]),
-    PhoneNumber;
-save_to_number_db(PhoneNumber) ->
-    NumberDb = number_db(PhoneNumber),
-    JObj = to_json(PhoneNumber),
-    case datamgr_save(PhoneNumber, NumberDb, JObj) of
-        {'ok', Doc} -> from_json_with_options(Doc, PhoneNumber);
-        {'error', 'not_found'} ->
-            lager:debug("creating new db '~s' for number '~s'", [NumberDb, number(PhoneNumber)]),
-            'true' = kz_datamgr:db_create(NumberDb),
-            {'ok',_} = kz_datamgr:revise_doc_from_file(NumberDb, ?APP, <<"views/numbers.json">>),
-            save_to_number_db(PhoneNumber);
-        {'error', E} ->
-            lager:error("failed to save ~s in ~s: ~p", [number(PhoneNumber), NumberDb, E]),
-            knm_errors:database_error(E, PhoneNumber)
+save_number_docs(NumberDb, Docs) ->
+    case kz_datamgr:save_docs(NumberDb, Docs) of
+        {ok, _} -> ok;
+        {error, not_found} ->
+            lager:debug("creating new db ~p", [NumberDb]),
+            true = kz_datamgr:db_create(NumberDb),
+            {ok,_} = kz_datamgr:revise_doc_from_file(NumberDb, ?APP, <<"views/numbers.json">>),
+            save_number_docs(NumberDb, Docs);
+        {error, Reason} ->
+            lager:error("failed to save to ~s: ~p", [NumberDb, Reason]),
+            Reason
     end.
 -endif.
 
@@ -1376,7 +1394,11 @@ save_to_number_db(PhoneNumber) ->
 %% @doc
 %% @end
 %%--------------------------------------------------------------------
--spec handle_assignment(knm_phone_number()) -> knm_phone_number().
+-spec handle_assignment(knm_phone_number()) -> knm_phone_number();
+                       (knm_numbers:collection()) -> knm_numbers:collection().
+handle_assignment(T=#{todo := PNs}) ->
+    NewPNs = [handle_assignment(PN) || PN <- PNs],
+    knm_numbers:ok(NewPNs, T);
 handle_assignment(PhoneNumber) ->
     ?LOG_DEBUG("handling assignment for ~s", [number(PhoneNumber)]),
     unassign_from_prev(assign(PhoneNumber)).
