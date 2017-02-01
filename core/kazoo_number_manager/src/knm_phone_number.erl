@@ -60,6 +60,7 @@
 
 -record(knm_phone_number, {number :: ne_binary()
                           ,number_db :: ne_binary()
+                          ,rev :: ne_binary()
                           ,assign_to :: api_ne_binary()
                           ,assigned_to :: api_ne_binary()
                           ,prev_assigned_to :: api_ne_binary()
@@ -525,6 +526,7 @@ to_public_json(Number) ->
 to_json(#knm_phone_number{doc=JObj}=N) ->
     kz_json:from_list(
       [{<<"_id">>, number(N)}
+      ,{<<"_rev">>, rev(N)}
       ,{?PVT_DB_NAME, number_db(N)}
       ,{?PVT_STATE, state(N)}
       ,{?PVT_PORTED_IN, ported_in(N)}
@@ -568,6 +570,7 @@ from_json(JObj0) ->
     {'ok', PhoneNumber} =
         setters(new(),
                 [{fun set_number/2, knm_converters:normalize(kz_doc:id(JObj))}
+                ,{fun set_rev/2, kz_doc:revision(JObj)}
                 ,{fun set_assigned_to/3, kz_json:get_value(?PVT_ASSIGNED_TO, JObj), UsedBy}
                 ,{fun set_prev_assigned_to/2, kz_json:get_value(?PVT_PREVIOUSLY_ASSIGNED_TO, JObj)}
                 ,{fun set_features/2, maybe_rename_features(Features)}
@@ -782,8 +785,15 @@ set_number(N, <<"+",_:8,_/binary>>=NormalizedNum) ->
 %% @end
 %%--------------------------------------------------------------------
 -spec number_db(knm_phone_number()) -> ne_binary().
-number_db(#knm_phone_number{number_db=NumberDb}) ->
-    NumberDb.
+number_db(#knm_phone_number{number_db=NumberDb}) -> NumberDb.
+
+%% @private
+-spec rev(knm_phone_number()) -> ne_binary().
+rev(#knm_phone_number{rev=Rev}) -> Rev.
+
+-spec set_rev(knm_phone_number(), ne_binary()) -> knm_phone_number().
+set_rev(N, ?NE_BINARY=Rev) ->
+    N#knm_phone_number{rev=Rev}.
 
 %%--------------------------------------------------------------------
 %% @public
