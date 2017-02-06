@@ -526,7 +526,6 @@ to_public_json(Number) ->
 to_json(#knm_phone_number{doc=JObj}=N) ->
     kz_json:from_list(
       [{<<"_id">>, number(N)}
-      ,{<<"_rev">>, rev(N)}
       ,{?PVT_DB_NAME, number_db(N)}
       ,{?PVT_STATE, state(N)}
       ,{?PVT_PORTED_IN, ported_in(N)}
@@ -538,7 +537,8 @@ to_json(#knm_phone_number{doc=JObj}=N) ->
       ]
       ++
           props:filter_empty(
-            [{?PVT_ASSIGNED_TO, assigned_to(N)}
+            [{<<"_rev">>, rev(N)}
+            ,{?PVT_ASSIGNED_TO, assigned_to(N)}
             ,{?PVT_AUTH_BY, auth_by(N)}
             ,{?PVT_PREVIOUSLY_ASSIGNED_TO, prev_assigned_to(N)}
             ,{?PVT_USED_BY, used_by(N)}
@@ -793,7 +793,7 @@ set_number(N, <<"+",_:8,_/binary>>=NormalizedNum) ->
 number_db(#knm_phone_number{number_db=NumberDb}) -> NumberDb.
 
 %% @private
--spec rev(knm_phone_number()) -> ne_binary().
+-spec rev(knm_phone_number()) -> api_ne_binary().
 rev(#knm_phone_number{rev=Rev}) -> Rev.
 
 -spec set_rev(knm_phone_number(), ne_binary()) -> knm_phone_number().
