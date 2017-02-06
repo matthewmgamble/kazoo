@@ -567,26 +567,31 @@ from_json(JObj0) ->
         end,
     Now = kz_time:current_tstamp(),
     UsedBy = kz_json:get_value(?PVT_USED_BY, JObj),
-    {'ok', PhoneNumber} =
-        setters(new(),
-                [{fun set_number/2, knm_converters:normalize(kz_doc:id(JObj))}
-                ,{fun set_rev/2, kz_doc:revision(JObj)}
-                ,{fun set_assigned_to/3, kz_json:get_value(?PVT_ASSIGNED_TO, JObj), UsedBy}
-                ,{fun set_prev_assigned_to/2, kz_json:get_value(?PVT_PREVIOUSLY_ASSIGNED_TO, JObj)}
-                ,{fun set_features/2, maybe_rename_features(Features)}
-                ,{fun set_state/2, kz_json:get_first_defined([?PVT_STATE, ?PVT_STATE_LEGACY], JObj)}
-                ,{fun set_reserve_history/2, kz_json:get_value(?PVT_RESERVE_HISTORY, JObj, [])}
-                ,{fun set_ported_in/2, kz_json:is_true(?PVT_PORTED_IN, JObj)}
-                ,{fun set_module_name/2, kz_json:get_value(?PVT_MODULE_NAME, JObj)}
-                ,{fun set_carrier_data/2, kz_json:get_value(?PVT_CARRIER_DATA, JObj)}
-                ,{fun set_region/2, kz_json:get_value(?PVT_REGION, JObj)}
-                ,{fun set_auth_by/2, kz_json:get_value(?PVT_AUTH_BY, JObj)}
-                ,{fun set_doc/2, sanitize_public_fields(JObj)}
-                ,{fun set_modified/2, kz_doc:modified(JObj, Now)}
-                ,{fun set_created/2, kz_doc:created(JObj, Now)}
-                ,{fun set_features_allowed/2, kz_json:get_list_value(?PVT_FEATURES_ALLOWED, JObj, ?DEFAULT_FEATURES_ALLOWED)}
-                ,{fun set_features_denied/2, kz_json:get_list_value(?PVT_FEATURES_DENIED, JObj, ?DEFAULT_FEATURES_DENIED)}
-                ]),
+    Settings =
+        [{fun set_number/2, knm_converters:normalize(kz_doc:id(JObj))}
+        ,{fun set_assigned_to/3, kz_json:get_value(?PVT_ASSIGNED_TO, JObj), UsedBy}
+        ,{fun set_prev_assigned_to/2, kz_json:get_value(?PVT_PREVIOUSLY_ASSIGNED_TO, JObj)}
+        ,{fun set_features/2, maybe_rename_features(Features)}
+        ,{fun set_state/2, kz_json:get_first_defined([?PVT_STATE, ?PVT_STATE_LEGACY], JObj)}
+        ,{fun set_reserve_history/2, kz_json:get_value(?PVT_RESERVE_HISTORY, JObj, [])}
+        ,{fun set_ported_in/2, kz_json:is_true(?PVT_PORTED_IN, JObj)}
+        ,{fun set_module_name/2, kz_json:get_value(?PVT_MODULE_NAME, JObj)}
+        ,{fun set_carrier_data/2, kz_json:get_value(?PVT_CARRIER_DATA, JObj)}
+        ,{fun set_region/2, kz_json:get_value(?PVT_REGION, JObj)}
+        ,{fun set_auth_by/2, kz_json:get_value(?PVT_AUTH_BY, JObj)}
+        ,{fun set_doc/2, sanitize_public_fields(JObj)}
+        ,{fun set_modified/2, kz_doc:modified(JObj, Now)}
+        ,{fun set_created/2, kz_doc:created(JObj, Now)}
+        ,{fun set_features_allowed/2, kz_json:get_list_value(?PVT_FEATURES_ALLOWED, JObj, ?DEFAULT_FEATURES_ALLOWED)}
+        ,{fun set_features_denied/2, kz_json:get_list_value(?PVT_FEATURES_DENIED, JObj, ?DEFAULT_FEATURES_DENIED)}
+        ],
+    {ok, PhoneNumber} =
+        setters(new()
+               ,[{fun set_rev/2, Rev}
+                 || Rev <- [kz_doc:revision(JObj)],
+                    Rev =/= undefined
+                ] ++ Settings
+               ),
     PhoneNumber.
 
 %% Handle moving away from provider-specific E911
@@ -788,14 +793,11 @@ set_number(N, <<"+",_:8,_/binary>>=NormalizedNum) ->
 number_db(#knm_phone_number{number_db=NumberDb}) -> NumberDb.
 
 %% @private
--spec rev(knm_phone_number()) -> api_ne_binary().
+-spec rev(knm_phone_number()) -> ne_binary().
 rev(#knm_phone_number{rev=Rev}) -> Rev.
 
--spec set_rev(knm_phone_number(), api_ne_binary()) -> knm_phone_number().
-set_rev(N, undefined=Rev) ->
-    N#knm_phone_number{rev=Rev};
-set_rev(N, ?NE_BINARY=Rev) ->
-    N#knm_phone_number{rev=Rev}.
+-spec set_rev(knm_phone_number(), ne_binary()) -> knm_phone_number().
+set_rev(N, ?NE_BINARY=Rev) -> N#knm_phone_number{rev=Rev}.
 
 %%--------------------------------------------------------------------
 %% @public
