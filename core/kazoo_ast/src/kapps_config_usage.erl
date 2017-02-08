@@ -267,6 +267,8 @@ config_to_schema('migrate', _Args, Schemas) ->
     Schemas;
 config_to_schema('get_node_value', _Args, Schemas) ->
     Schemas;
+config_to_schema('get_category', _Args, Schemas) ->
+    Schemas;
 config_to_schema(F='get_global', [Account, Cat, K], Schemas) ->
     config_to_schema(F, [Account, Cat, K, 'undefined'], Schemas);
 config_to_schema(F='get_global', [_Account, Cat, K, Default], Schemas) ->
