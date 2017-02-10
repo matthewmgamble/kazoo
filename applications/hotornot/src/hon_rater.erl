@@ -14,9 +14,9 @@
 
 -spec init() -> 'ok'.
 init() ->
-    [kapps_maintenance:refresh(kzd_ratedeck:format_ratedeck_db(Ratedeck))
-     || Ratedeck <- hotornot_config:ratedecks()
-    ],
+    _ = [kapps_maintenance:refresh(kzd_ratedeck:format_ratedeck_db(Ratedeck))
+         || Ratedeck <- hotornot_config:ratedecks()
+        ],
     'ok'.
 
 -spec handle_req(kapi_rate:req(), kz_proplist()) -> 'ok'.
