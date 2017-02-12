@@ -128,6 +128,14 @@ There are a few concerns that should be planned for when designing a Kazoo clust
 
 The following should be done to prepare a server for installation (this should be done on all servers in a cluster prior to installing anything)
 
+### Enable EPEL repository
+
+Some of the required CentOS packages are in the EPEL (https://fedoraproject.org/wiki/EPEL) repository and so it must be enabled before installing any of the 2600hz packages. 
+
+```shell
+#yum install epel-release
+````
+
 ### Add 2600hz repo
 
 ```shell
